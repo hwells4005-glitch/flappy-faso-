@@ -1,0 +1,53 @@
+# Utilise Buildozer dans un conteneur Docker pour builder l'APK Kivy
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Cache Buildozer / pip / gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ./.buildozer
+            ~/.cache/pip
+            ~/.gradle
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('**/requirements.txt','**/buildozer.spec','**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      - name: Show Python / Java versions (debug info)
+        run: |
+          python3 --version || true
+          java -version || true
+
+      - name: Build APK with Buildozer (Docker)
+        env:
+          # augmente la verbosité si tu veux plus de logs
+          BUILDOZER_LOG_LEVEL: 2
+        run: |
+          # On monte le repo dans le conteneur et on exécute buildozer.
+          # On passe --user pour éviter les fichiers root-owned sur le workspace.
+          docker run --rm \
+            -v "${{ github.workspace }}":/home/user/hostcwd \
+            -w /home/user/hostcwd \
+            --user "$(id -u):$(id -g)" \
+            kivy/buildozer:latest \
+            /bin/sh -c "buildozer android debug --verbose"
+
+      - name: List bin/ for debug
+        run: |
+          echo "Contenu du dossier bin/:"
+          ls -la bin || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flappy-faso-apk
+          path: bin/*.apk
